@@ -1,0 +1,15 @@
+// src/index.js (di dalam app.get('/api/health', ...))
+app.get('/api/health', async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT COUNT(*) as total FROM tenants');
+    res.json({ 
+      status: 'OK', 
+      message: 'Database connected successfully',
+      tenants_count: rows[0].total,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('DB Connection Error:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Database connection failed', error: err.message });
+  }
+});

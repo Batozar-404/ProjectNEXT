@@ -39,7 +39,7 @@ class User {
 
         const [result] = await pool.query(
             `INSERT INTO users (tenant_id, store_id, name, email, password_hash, role)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?)`,
             [tenantId, store_id || null, name, email, hashedPassword, role]
         );
 
@@ -54,7 +54,7 @@ class User {
         role = COALESCE(?, role),
         status = COALESCE(?, status),
         store_id = COALESCE(?, store_id)
-      WHERE tenant_id = ? AND id = ?`,
+        WHERE tenant_id = ? AND id = ?`,
             [name, role, status, store_id, tenantId, id]
         );
         return result.affectedRows > 0 ? this.findById(tenantId, id) : null;

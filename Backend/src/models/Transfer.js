@@ -3,15 +3,15 @@ const { pool } = require('../config/database');
 class Transfer {
     static async findAll(tenantId, filters = {}) {
         let query = `
-      SELECT t.*,
-             fs.name as from_store_name,
-             ts.name as to_store_name,
-             u.name as requested_by_name
-      FROM transfers t
-      JOIN stores fs ON t.from_store_id = fs.id
-      JOIN stores ts ON t.to_store_id = ts.id
-      LEFT JOIN users u ON t.requested_by = u.id
-      WHERE t.tenant_id = ?
+    SELECT t.*,
+    fs.name as from_store_name,
+    ts.name as to_store_name,
+    u.name as requested_by_name
+    FROM transfers t
+    JOIN stores fs ON t.from_store_id = fs.id
+    JOIN stores ts ON t.to_store_id = ts.id
+    LEFT JOIN users u ON t.requested_by = u.id
+    WHERE t.tenant_id = ?
     `;
         const params = [tenantId];
 
@@ -29,8 +29,8 @@ class Transfer {
     static async findById(tenantId, id) {
         const [rows] = await pool.query(
             `SELECT t.*,
-              fs.name as from_store_name,
-              ts.name as to_store_name,
+       fs.name as from_store_name,
+        ts.name as to_store_name,
               u.name as requested_by_name,
               u2.name as approved_by_name
        FROM transfers t

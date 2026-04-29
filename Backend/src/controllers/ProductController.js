@@ -1,45 +1,115 @@
-const ProductModel = require('../models/ProductModel');
+const Product = require('../models/Product');
+const { successResponse, errorResponse } = require('../utils/response');
+
+const getAllProducts = async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id || 1; // Temporary, akan diganti dengan middleware auth nanti
+        const products = await Product.findAll(tenantId, req.query);
+        successResponse(res, 'Products retrieved successfully', products);
+    } catch (error) {
+        errorResponse(res, 'Error retrieving products', error);
+    }
+};
+
+const getProductById = async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id || 1;
+        const product = await Product.findById(tenantId, req.params.id);
+
+        if (!product) {
+            return errorResponse(res, 'Product not found', null, 404);
+        }
+
+        successResponse(res, 'Product retrieved successfully', product);
+    } catch (error) {
+        errorResponse(res, 'Error retrieving product', error);
+    }
+};
+
+const createProduct = async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id || 1;
+        const { sku } = req.body;
+
+        // Check if SKU already exists
+        const existingProduct = await Product.findBySku(tenantId, sku);
+        if (existingProduct) {
+            return errorResponse(res, 'SKU already exists for this tenant', null, 400);
+        }
+
+        const product = await Product.create(tenantId, req.body);
+        successResponse(res, 'Product created successfully', product, 201);
+    } catch (error) {
+        errorResponse(res, 'Error creating product', error);
+    }
+};
+
+const updateProduct = async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id || 1;
+        const product = await Product.update(tenantId, req.params.id, req.body);
+
+        if (!product) {
+            return errorResponse(res, 'Product not found', null, 404);
+        }
+
+        successResponse(res, 'Product updated successfully', product);
+    } catch (error) {
+        errorResponse(res, 'Error updating product', error);
+    }
+};
+
+const deleteProduct = async (req, res) => {
+    try {
+        const tenantId = req.user?.tenant_id || 1;
+        const deleted = await Product.delete(tenantId, req.params.id);
+
+        if (!deleted) {
+            return errorResponse(res, 'Product not found', null, 404);
+        }
+
+        successResponse(res, 'Product deleted successfully');
+    } catch (error) {
+        errorResponse(res, 'Error deleting product', error);
+    }
+};
 
 module.exports = {
-  index: async (req, res) => {
-    try {
-      const products = await ProductModel.getAll(req.user.tenantId, req.query.search);
-      res.json({ success: true, data: products });
-    } catch (err) {
-      err.statusCode = 500;
-      throw err;
-    }
-  },
+    getAllProducts,
+    getProductById,
+    createProduct,
+    updateProduct,
+    deleteProduct
+};
+// Tambahkan fungsi ini ke productController.js
+const { pool } = require('../config/database');
 
-  store: async (req, res) => {
+const uploadProductImage = async (req, res) => {
     try {
-      const product = await ProductModel.create(req.user.tenantId, req.body);
-      res.status(201).json({ success: true, data: product });
-    } catch (err) {
-      err.statusCode = 500;
-      throw err;
-    }
-  },
+        const tenantId = req.tenantId;
+        const productId = req.params.id;
 
-  update: async (req, res) => {
-    try {
-      const updated = await ProductModel.update(req.user.tenantId, req.params.id, req.body);
-      if (!updated) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Produk tidak ditemukan" } });
-      res.json({ success: true, data: updated });
-    } catch (err) {
-      err.statusCode = 500;
-      throw err;
-    }
-  },
+        if (!req.file) {
+            return errorResponse(res, 'No image file uploaded', null, 400);
+        }
 
-  destroy: async (req, res) => {
-    try {
-      const deleted = await ProductModel.delete(req.user.tenantId, req.params.id);
-      if (!deleted) return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Produk tidak ditemukan" } });
-      res.json({ success: true, message: "Produk berhasil dihapus" });
-    } catch (err) {
-      err.statusCode = 500;
-      throw err;
+        const imageUrl = `/uploads/${req.file.filename}`;
+
+        await pool.query(
+            'UPDATE products SET image_url = ? WHERE tenant_id = ? AND id = ?',
+            [imageUrl, tenantId, productId]
+        );
+
+        const updatedProduct = await Product.findById(tenantId, productId);
+
+        successResponse(res, 'Product image uploaded successfully', updatedProduct);
+    } catch (error) {
+        errorResponse(res, 'Error uploading image', error);
     }
-  }
+};
+
+// Export tambahan
+module.exports = {
+    // ... exports sebelumnya
+    uploadProductImage
 };

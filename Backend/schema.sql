@@ -1,99 +1,146 @@
+CREATE DATABASE IF NOT EXISTS inventori_multi
+DEFAULT CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
 USE inventori_multi;
 
 CREATE TABLE IF NOT EXISTS tenants (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  slug VARCHAR(50) UNIQUE NOT NULL,
-  owner_email VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS users (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  tenant_id INT NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  role ENUM('owner', 'manager', 'staff') DEFAULT 'staff',
-  status ENUM('active', 'inactive') DEFAULT 'active',
+  slug VARCHAR(100) NOT NULL,
+  owner_email VARCHAR(255) NOT NULL,
+  plan VARCHAR(50) NOT NULL DEFAULT 'free',
+  status ENUM('active','suspended','deleted') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
-);
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_slug (slug),
+  UNIQUE KEY unique_owner_email (owner_email)
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS stores (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  tenant_id INT NOT NULL,
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(100) NOT NULL,
-  code VARCHAR(20) NOT NULL,
+  code VARCHAR(50) NOT NULL,
   address TEXT,
+  is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_store_code (tenant_id, code)
-);
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_tenant_code (tenant_id, code),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS users (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
+  store_id BIGINT UNSIGNED NULL,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('tenant_owner','store_manager','staff') NOT NULL,
+  status ENUM('active','inactive') DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_tenant_email (tenant_id, email),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS product_categories (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  tenant_id INT NOT NULL,
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(100) NOT NULL,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_category (tenant_id, name)
-);
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_tenant_category (tenant_id, name),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS products (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  tenant_id INT NOT NULL,
-  category_id INT DEFAULT NULL,
-  sku VARCHAR(50) NOT NULL,
-  name VARCHAR(150) NOT NULL,
-  price DECIMAL(12,2) DEFAULT 0.00,
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
+  category_id BIGINT UNSIGNED NULL,
+  sku VARCHAR(100) NOT NULL,
+  name VARCHAR(200) NOT NULL,
+  description TEXT,
+  unit VARCHAR(50) DEFAULT 'pcs',
+  cost_price DECIMAL(12,2) DEFAULT 0,
+  sell_price DECIMAL(12,2) DEFAULT 0,
+  image_url VARCHAR(500) NULL,
+  is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES product_categories(id) ON DELETE SET NULL,
-  UNIQUE KEY unique_sku (tenant_id, sku)
-);
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_tenant_sku (tenant_id, sku),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES product_categories(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 
 CREATE TABLE IF NOT EXISTS inventories (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  store_id INT NOT NULL,
-  product_id INT NOT NULL,
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
+  store_id BIGINT UNSIGNED NOT NULL,
+  product_id BIGINT UNSIGNED NOT NULL,
   current_stock INT DEFAULT 0,
-  min_stock INT DEFAULT 5,
+  min_stock INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
-  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_inventory (store_id, product_id)
-);
+  UNIQUE KEY unique_tenant_store_product (tenant_id, store_id, product_id),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 
 CREATE TABLE IF NOT EXISTS stock_movements (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  tenant_id INT NOT NULL,
-  store_id INT NOT NULL,
-  product_id INT NOT NULL,
-  type ENUM('in', 'out', 'transfer_in', 'transfer_out', 'adjustment') NOT NULL,
-  quantity INT NOT NULL CHECK (quantity > 0),
-  ref_no VARCHAR(50),
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
+  store_id BIGINT UNSIGNED NOT NULL,
+  product_id BIGINT UNSIGNED NOT NULL,
+  type ENUM('in','out','transfer_in','transfer_out','adjustment') NOT NULL,
+  quantity INT UNSIGNED NOT NULL,
+  unit_cost_snapshot DECIMAL(12,2) DEFAULT NULL,
+  ref_no VARCHAR(100),
   notes TEXT,
-  created_by INT,
+  created_by BIGINT UNSIGNED NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
-  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-);
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS transfers (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  tenant_id INT NOT NULL,
-  from_store_id INT NOT NULL,
-  to_store_id INT NOT NULL,
-  product_id INT NOT NULL,
-  quantity INT NOT NULL CHECK (quantity > 0),
-  status ENUM('pending', 'approved', 'in_transit', 'completed', 'rejected') DEFAULT 'pending',
-  requested_by INT,
-  approved_by INT,
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT UNSIGNED NOT NULL,
+  from_store_id BIGINT UNSIGNED NOT NULL,
+  to_store_id BIGINT UNSIGNED NOT NULL,
+  status ENUM('pending','approved','in_transit','completed','rejected','cancelled') DEFAULT 'pending',
+  requested_by BIGINT UNSIGNED NULL,
+  approved_by BIGINT UNSIGNED NULL,
   notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  FOREIGN KEY (from_store_id) REFERENCES stores(id) ON DELETE CASCADE,
-  FOREIGN KEY (to_store_id) REFERENCES stores(id) ON DELETE CASCADE,
-  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-);
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CHECK (from_store_id <> to_store_id),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (from_store_id) REFERENCES stores(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (to_store_id) REFERENCES stores(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS transfer_items (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  transfer_id BIGINT UNSIGNED NOT NULL,
+  product_id BIGINT UNSIGNED NOT NULL,
+  quantity INT NOT NULL,
+  FOREIGN KEY (transfer_id) REFERENCES transfers(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_products_search ON products(name, sku);
+CREATE INDEX idx_movements_type ON stock_movements(type);
+CREATE INDEX idx_movements_created ON stock_movements(created_at);
+CREATE INDEX idx_transfers_status ON transfers(status);
+CREATE INDEX idx_inventory_stock ON inventories(current_stock, min_stock);
+

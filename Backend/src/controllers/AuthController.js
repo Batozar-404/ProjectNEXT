@@ -1,57 +1,139 @@
-const bcrypt = require('bcryptjs');
-const { pool } = require('../lib/db');
-const { generateToken } = require('../utils/jwt');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const Tenant = require('../models/Tenant');
+const { successResponse, errorResponse } = require('../utils/response');
+const { validationResult } = require('express-validator');
 
-module.exports = {
-  register: async (req, res) => {
+const register = async (req, res) => {
     try {
-      const { name, email, password, tenant_slug } = req.body;
-      if (!name || !email || !password || !tenant_slug) {
-        return res.status(400).json({ error: 'All fields required' });
-      }
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return errorResponse(res, 'Validation failed', errors.array(), 400);
+        }
 
-      const [tenants] = await pool.execute('SELECT id FROM tenant WHERE slug = ?', [tenant_slug]);
-      if (!tenants.length) return res.status(404).json({ error: 'Tenant not found' });
-      const tenantId = tenants[0].id;
+        const { tenant_name, slug, owner_name, owner_email, password } = req.body;
 
-      const [exist] = await pool.execute('SELECT id FROM user WHERE tenant_id = ? AND email = ?', [tenantId, email]);
-      if (exist.length) return res.status(400).json({ error: 'Email already registered' });
+        // Check if tenant already exists
+        const existingTenant = await Tenant.findBySlug(slug);
+        if (existingTenant) {
+            return errorResponse(res, 'Tenant slug already exists', null, 400);
+        }
 
-      const hash = await bcrypt.hash(password, 10);
-      const [result] = await pool.execute(
-        `INSERT INTO user (tenant_id, name, email, password_hash, role, status) VALUES (?, ?, ?, ?, 'staff', 'active')`,
-        [tenantId, name, email, hash]
-      );
+        // Check if owner email already used
+        const existingUser = await User.findByEmail(null, owner_email);
+        if (existingUser) {
+            return errorResponse(res, 'Email already registered', null, 400);
+        }
 
-      const token = generateToken({ userId: result.insertId, tenantId, email, role: 'staff' });
-      res.status(201).json({ message: 'Registered', data: { id: result.insertId, name, email, tenant_id: tenantId, token } });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Registration failed' });
+        // Create tenant
+        const tenant = await Tenant.create({
+            name: tenant_name,
+            slug: slug,
+            owner_email: owner_email,
+            plan: 'free'
+        });
+
+        // Create owner user
+        const user = await User.create(tenant.id, {
+            name: owner_name,
+            email: owner_email,
+            password: password,
+            role: 'tenant_owner'
+        });
+
+        // Generate token
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                tenant_id: tenant.id,
+                tenant_slug: tenant.slug
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRE }
+        );
+
+        successResponse(res, 'Registration successful', { token, user, tenant }, 201);
+    } catch (error) {
+        errorResponse(res, 'Registration failed', error);
     }
-  },
-
-  login: async (req, res) => {
-    try {
-      const { email, password, tenant_slug } = req.body;
-      if (!email || !password || !tenant_slug) return res.status(400).json({ error: 'All fields required' });
-
-      const [tenants] = await pool.execute('SELECT id FROM tenant WHERE slug = ?', [tenant_slug]);
-      if (!tenants.length) return res.status(404).json({ error: 'Tenant not found' });
-      const tenantId = tenants[0].id;
-
-      const [users] = await pool.execute('SELECT * FROM user WHERE tenant_id = ? AND email = ?', [tenantId, email]);
-      if (!users.length) return res.status(401).json({ error: 'Invalid credentials' });
-
-      const user = users[0];
-      const valid = await bcrypt.compare(password, user.password_hash);
-      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
-      const token = generateToken({ userId: user.id, tenantId, email: user.email, role: user.role });
-      res.json({ message: 'Login success', data: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: tenantId, token } });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Login failed' });
-    }
-  }
 };
+
+const login = async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return errorResponse(res, 'Validation failed', errors.array(), 400);
+        }
+
+        const { email, password } = req.body;
+
+        // Simplified login - ini akan di-improve dengan tenant context nanti
+        // Untuk sprint ini, kita coba cari user di semua tenant
+
+        // Query ambil user dengan join ke tenant
+        const { pool } = require('../config/database');
+        const [rows] = await pool.query(
+            `SELECT u.*, t.slug as tenant_slug, t.name as tenant_name
+       FROM users u
+       JOIN tenants t ON u.tenant_id = t.id
+       WHERE u.email = ? AND u.status = 'active'`,
+            [email]
+        );
+
+        const user = rows[0];
+
+        if (!user) {
+            return errorResponse(res, 'Invalid email or password', null, 401);
+        }
+
+        const isValidPassword = await User.verifyPassword(user, password);
+
+        if (!isValidPassword) {
+            return errorResponse(res, 'Invalid email or password', null, 401);
+        }
+
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                tenant_id: user.tenant_id,
+                tenant_slug: user.tenant_slug,
+                store_id: user.store_id
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRE }
+        );
+
+        successResponse(res, 'Login successful', {
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                tenant_id: user.tenant_id,
+                tenant_name: user.tenant_name,
+                store_id: user.store_id
+            }
+        });
+    } catch (error) {
+        errorResponse(res, 'Login failed', error);
+    }
+};
+
+const getMe = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.tenant_id, req.user.id);
+        if (!user) {
+            return errorResponse(res, 'User not found', null, 404);
+        }
+        successResponse(res, 'User profile retrieved', user);
+    } catch (error) {
+        errorResponse(res, 'Error retrieving user profile', error);
+    }
+};
+
+module.exports = { register, login, getMe };

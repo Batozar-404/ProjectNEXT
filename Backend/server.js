@@ -19,7 +19,7 @@ const SECRET = 'secret123';
 app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
-app.use(express.json());  // ⚠️ INI YANG PENTING - HARUS SEBELUM ROUTES
+app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
 
 // ========== STATIC FILES (buat akses gambar) ==========
@@ -35,7 +35,10 @@ function authMiddleware(req, res, next) {
     const authHeader = req.headers['authorization'];
 
     if (!authHeader) {
-        return res.status(401).json({ message: 'Access token required' });
+        return res.status(401).json({ 
+            success: false,
+            message: 'Access token required' 
+        });
     }
 
     const token = authHeader.split(' ')[1];
@@ -45,7 +48,10 @@ function authMiddleware(req, res, next) {
         req.user = decoded;
         next();
     } catch (err) {
-        return res.status(401).json({ message: 'Invalid token' });
+        return res.status(401).json({ 
+            success: false,
+            message: 'Invalid token' 
+        });
     }
 }
 
@@ -87,15 +93,16 @@ const upload = multer({
 
 // ========== ROUTES ==========
 
-// Health check (tanpa auth)
+// Health check (PUBLIC - tanpa auth)
 app.get('/health', (req, res) => {
     res.json({
         status: 'OK',
-        message: 'Inventori.Multi API is running'
+        message: 'Inventori.Multi API is running',
+        timestamp: new Date().toISOString()
     });
 });
 
-// Register (tanpa auth)
+// Register (PUBLIC - tanpa auth)
 app.post('/api/auth/register', async (req, res) => {
     console.log('Register request body:', req.body);
 
@@ -129,10 +136,15 @@ app.post('/api/auth/register', async (req, res) => {
 
     users.push(user);
 
-    const token = jwt.sign({ id: user.id, email: user.owner_email }, SECRET, { expiresIn: '24h' });
+    const token = jwt.sign(
+        { id: user.id, email: user.owner_email }, 
+        SECRET, 
+        { expiresIn: '24h' }
+    );
 
     res.status(201).json({
         success: true,
+        message: 'Registration successful',
         token,
         user: {
             id: user.id,
@@ -142,7 +154,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
 });
 
-// Login (tanpa auth)
+// Login (PUBLIC - tanpa auth)
 app.post('/api/auth/login', async (req, res) => {
     console.log('Login request body:', req.body);
 
@@ -171,10 +183,15 @@ app.post('/api/auth/login', async (req, res) => {
         });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.owner_email }, SECRET, { expiresIn: '24h' });
+    const token = jwt.sign(
+        { id: user.id, email: user.owner_email }, 
+        SECRET, 
+        { expiresIn: '24h' }
+    );
 
     res.json({
         success: true,
+        message: 'Login successful',
         token,
         user: {
             id: user.id,
@@ -184,8 +201,37 @@ app.post('/api/auth/login', async (req, res) => {
     });
 });
 
-// Create Product (TANPA AUTH - sesuai kode asli)
-app.post('/api/products', (req, res) => {
+// ========== PRODUCT ROUTES (SEMUA PAKAI AUTH) ==========
+
+// Get All Products (PAKAI AUTH)
+app.get('/api/products', authMiddleware, (req, res) => {
+    res.json({
+        success: true,
+        data: products,
+        total: products.length
+    });
+});
+
+// Get Product by ID (PAKAI AUTH)
+app.get('/api/products/:id', authMiddleware, (req, res) => {
+    const id = parseInt(req.params.id);
+    const product = products.find(p => p.id === id);
+
+    if (product) {
+        res.json({
+            success: true,
+            data: product
+        });
+    } else {
+        res.status(404).json({
+            success: false,
+            message: 'Product not found'
+        });
+    }
+});
+
+// Create Product (PAKAI AUTH)
+app.post('/api/products', authMiddleware, (req, res) => {
     console.log('Create product request:', req.body);
 
     const { sku, name, category_id, unit, cost_price, sell_price } = req.body;
@@ -225,35 +271,8 @@ app.post('/api/products', (req, res) => {
     });
 });
 
-// Get All Products (TANPA AUTH - sesuai kode asli)
-app.get('/api/products', (req, res) => {
-    res.json({
-        success: true,
-        data: products,
-        total: products.length
-    });
-});
-
-// Get Product by ID (TAMBAHAN - biar bisa lihat detail produk)
-app.get('/api/products/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const product = products.find(p => p.id === id);
-
-    if (product) {
-        res.json({
-            success: true,
-            data: product
-        });
-    } else {
-        res.status(404).json({
-            success: false,
-            message: 'Product not found'
-        });
-    }
-});
-
-// Update Product (TANPA AUTH - sesuai kode asli)
-app.put('/api/products/:id', (req, res) => {
+// Update Product (PAKAI AUTH)
+app.put('/api/products/:id', authMiddleware, (req, res) => {
     const id = parseInt(req.params.id);
     const index = products.findIndex(p => p.id === id);
 
@@ -268,7 +287,7 @@ app.put('/api/products/:id', (req, res) => {
     }
 });
 
-// Delete Product (PAKAI AUTH - sesuai kode asli)
+// Delete Product (PAKAI AUTH)
 app.delete('/api/products/:id', authMiddleware, (req, res) => {
     const id = parseInt(req.params.id);
     const index = products.findIndex(p => p.id === id);
@@ -284,11 +303,10 @@ app.delete('/api/products/:id', authMiddleware, (req, res) => {
     }
 });
 
-// ========== UPLOAD PRODUCT IMAGE (ROUTE BARU) ==========
+// Upload Product Image (PAKAI AUTH)
 app.post('/api/products/:id/upload-image', authMiddleware, upload.single('file'), (req, res) => {
     const productId = parseInt(req.params.id);
 
-    // Cek apakah produk ada
     const productIndex = products.findIndex(p => p.id === productId);
     if (productIndex === -1) {
         return res.status(404).json({
@@ -297,7 +315,6 @@ app.post('/api/products/:id/upload-image', authMiddleware, upload.single('file')
         });
     }
 
-    // Cek apakah file diupload
     if (!req.file) {
         return res.status(400).json({
             success: false,
@@ -305,7 +322,6 @@ app.post('/api/products/:id/upload-image', authMiddleware, upload.single('file')
         });
     }
 
-    // Simpan image_url ke produk
     const imageUrl = `/uploads/${req.file.filename}`;
     products[productIndex].image_url = imageUrl;
 
@@ -316,11 +332,12 @@ app.post('/api/products/:id/upload-image', authMiddleware, upload.single('file')
     });
 });
 
+// ========== TRANSFER ROUTES (PAKAI AUTH) ==========
+
 // Create transfer request
 app.post('/api/transfers', authMiddleware, (req, res) => {
     const { from_store_id, to_store_id, items, notes } = req.body;
 
-    // Validasi
     if (!from_store_id || !to_store_id || !items || items.length === 0) {
         return res.status(400).json({
             success: false,
@@ -430,10 +447,11 @@ app.put('/api/transfers/:id/reject', authMiddleware, (req, res) => {
         data: transfer
     });
 });
-// Error handler untuk multer
+
+// ========== ERROR HANDLER ==========
 app.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {
-        if (error.code === 'FILE_TOO_LARGE') {
+        if (error.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({
                 success: false,
                 message: 'File terlalu besar. Maksimal 5MB'
@@ -448,7 +466,18 @@ app.use((error, req, res, next) => {
         });
     }
 
-    next(error);
+    res.status(500).json({
+        success: false,
+        message: error.message || 'Internal server error'
+    });
+});
+
+// ========== 404 HANDLER ==========
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Route not found - ${req.originalUrl}`
+    });
 });
 
 // ========== RUN SERVER ==========
@@ -457,17 +486,20 @@ app.listen(PORT, () => {
     console.log(`📋 Health check: http://localhost:${PORT}/health`);
     console.log(`📁 Upload folder: ${uploadDir}`);
     console.log(`\n✅ Available routes:`);
+    console.log(`\n   [PUBLIC ROUTES]`);
+    console.log(`   GET    /health`);
     console.log(`   POST   /api/auth/register`);
     console.log(`   POST   /api/auth/login`);
+    console.log(`\n   [PROTECTED ROUTES - Need Auth Token]`);
     console.log(`   GET    /api/products`);
     console.log(`   GET    /api/products/:id`);
     console.log(`   POST   /api/products`);
     console.log(`   PUT    /api/products/:id`);
-    console.log(`   DELETE /api/products/:id (butuh auth)`);
-    console.log(`   POST   /api/products/:id/upload-image (butuh auth)`);
-    console.log(`   POST   /api/transfers (butuh auth)`);
-    console.log(`   GET    /api/transfers (butuh auth)`);
-    console.log(`   GET    /api/transfers/:id (butuh auth)`);
-    console.log(`   PUT    /api/transfers/:id/approve (butuh auth)`);
-    console.log(`   PUT    /api/transfers/:id/reject (butuh auth)`);
+    console.log(`   DELETE /api/products/:id`);
+    console.log(`   POST   /api/products/:id/upload-image`);
+    console.log(`   POST   /api/transfers`);
+    console.log(`   GET    /api/transfers`);
+    console.log(`   GET    /api/transfers/:id`);
+    console.log(`   PUT    /api/transfers/:id/approve`);
+    console.log(`   PUT    /api/transfers/:id/reject`);
 });

@@ -1,13 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { 
-    LayoutDashboard, 
-    Package, 
-    ArrowRightLeft, 
-    FileText, 
-    Shield, 
-    Users, 
-    Settings, 
-    LogOut 
+import {
+    LayoutDashboard,
+    Package,
+    ArrowRightLeft,
+    FileText,
+    Shield,
+    Users,
+    Settings,
+    LogOut
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -54,10 +54,9 @@ const Sidebar = () => {
                         key={item.path}
                         to={item.path}
                         className={({ isActive }) =>
-                            `flex items-center px-3 py-2.5 my-1 rounded-lg transition-all duration-200 ${
-                                isActive 
-                                    ? 'bg-gray-800 text-white' 
-                                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                            `flex items-center px-3 py-2.5 my-1 rounded-lg transition-all duration-200 ${isActive
+                                ? 'bg-gray-800 text-white'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                             }`
                         }
                     >
@@ -77,10 +76,9 @@ const Sidebar = () => {
                                 key={item.path}
                                 to={item.path}
                                 className={({ isActive }) =>
-                                    `flex items-center px-3 py-2.5 my-1 rounded-lg transition-all duration-200 ${
-                                        isActive 
-                                            ? 'bg-gray-800 text-white' 
-                                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                    `flex items-center px-3 py-2.5 my-1 rounded-lg transition-all duration-200 ${isActive
+                                        ? 'bg-gray-800 text-white'
+                                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                                     }`
                                 }
                             >
@@ -98,10 +96,9 @@ const Sidebar = () => {
                         key={item.path}
                         to={item.path}
                         className={({ isActive }) =>
-                            `flex items-center px-3 py-2.5 my-1 rounded-lg transition-all duration-200 ${
-                                isActive 
-                                    ? 'bg-gray-800 text-white' 
-                                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                            `flex items-center px-3 py-2.5 my-1 rounded-lg transition-all duration-200 ${isActive
+                                ? 'bg-gray-800 text-white'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                             }`
                         }
                     >

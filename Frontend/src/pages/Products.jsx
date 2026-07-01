@@ -3,13 +3,7 @@ import { Plus, Search, Edit2, Trash2, Eye } from 'lucide-react';
 import Modal from '../components/Common/Modal';
 import Loading from '../components/Common/Loading';
 import toast from 'react-hot-toast';
-
-// Mock data untuk sementara (karena backend belum konek)
-const mockProducts = [
-    { id: 1, sku: 'PRD001', name: 'Kipas Angin', description: 'Kipas angin 16 inch', unit: 'pcs', cost_price: 150000, sell_price: 200000, current_stock: 50, min_stock: 10, category_name: 'Elektronik' },
-    { id: 2, sku: 'PRD002', name: 'Meja Kayu', description: 'Meja makan kayu jati', unit: 'pcs', cost_price: 500000, sell_price: 750000, current_stock: 25, min_stock: 5, category_name: 'Furniture' },
-    { id: 3, sku: 'PRD003', name: 'Indomie Goreng', description: 'Mie instan rasa goreng', unit: 'dus', cost_price: 90000, sell_price: 120000, current_stock: 100, min_stock: 20, category_name: 'Makanan' },
-];
+import { getProducts, createProduct, updateProduct, deleteProduct } from '../services/productService';
 
 const Products = () => {
     const [products, setProducts] = useState([]);
@@ -26,33 +20,59 @@ const Products = () => {
         sell_price: 0
     });
 
-    useEffect(() => {
-        // Load mock data
-        setTimeout(() => {
-            setProducts(mockProducts);
+    // ✅ 1. Ambil data produk dari API
+    const fetchProducts = async () => {
+        setLoading(true);
+        try {
+            const response = await getProducts();
+            setProducts(response.data.data || []);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            toast.error('Gagal memuat produk');
+        } finally {
             setLoading(false);
-        }, 500);
+        }
+    };
+
+    useEffect(() => {
+        fetchProducts();
     }, []);
 
+    // ✅ 2. Handle Submit (Create/Update)
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
             if (editingProduct) {
-                toast.success('Product updated successfully');
+                // Update produk
+                await updateProduct(editingProduct.id, formData);
+                toast.success('Produk berhasil diupdate');
             } else {
-                toast.success('Product created successfully');
+                // ✅ CREATE produk baru
+                await createProduct(formData);
+                toast.success('Produk berhasil ditambahkan');
             }
             setShowModal(false);
             resetForm();
+            // ✅ 3. FETCH ULANG data produk setelah tambah/update
+            await fetchProducts();
         } catch (error) {
-            toast.error('Operation failed');
+            console.error('Error saving product:', error);
+            toast.error(error.response?.data?.message || 'Gagal menyimpan produk');
         }
     };
 
-    const handleDelete = (id) => {
-        if (confirm('Are you sure you want to delete this product?')) {
-            setProducts(prev => prev.filter(p => p.id !== id));
-            toast.success('Product deleted successfully');
+    // ✅ 4. Handle Delete
+    const handleDelete = async (id) => {
+        if (confirm('Yakin ingin menghapus produk ini?')) {
+            try {
+                await deleteProduct(id);
+                toast.success('Produk berhasil dihapus');
+                // ✅ 5. FETCH ULANG data setelah hapus
+                await fetchProducts();
+            } catch (error) {
+                console.error('Error deleting product:', error);
+                toast.error('Gagal menghapus produk');
+            }
         }
     };
 
@@ -82,14 +102,15 @@ const Products = () => {
     };
 
     const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.sku.toLowerCase().includes(search.toLowerCase())
+        p.name?.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku?.toLowerCase().includes(search.toLowerCase())
     );
 
     if (loading) return <Loading />;
 
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
+            {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800">Products</h1>
@@ -107,7 +128,7 @@ const Products = () => {
                 </button>
             </div>
 
-            {/* Search Bar */}
+            {/* Search */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -121,7 +142,7 @@ const Products = () => {
                 </div>
             </div>
 
-            {/* Products Table */}
+            {/* Tabel Produk */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
@@ -186,7 +207,7 @@ const Products = () => {
                 </div>
             </div>
 
-            {/* Add/Edit Modal */}
+            {/* Modal Form */}
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingProduct ? 'Edit Product' : 'Add New Product'} size="lg">
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -234,7 +255,15 @@ const Products = () => {
                                 <option value="box">Box</option>
                             </select>
                         </div>
-                        <div></div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity</label>
+                            <input
+                                type="number"
+                                value={formData.stock_quantity}
+                                onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>

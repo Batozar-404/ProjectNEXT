@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider } from './context/LanguageContext';
 import Layout from './components/Layout/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -12,6 +14,7 @@ import Admins from './pages/Admins';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+
 
 const LoadingSpinner = () => (
     <div className="flex justify-center items-center h-screen">
@@ -74,11 +77,14 @@ function App() {
     return (
         <Router>
             <AuthProvider>
-                <Toaster position="top-right" />
-                <AppRoutes />
+                <ThemeProvider>
+                    <LanguageProvider>
+                        <Toaster position="top-right" />
+                        <AppRoutes />
+                    </LanguageProvider>
+                </ThemeProvider>
             </AuthProvider>
         </Router>
     );
 }
-
 export default App;
